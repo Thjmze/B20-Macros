@@ -1,0 +1,107 @@
+// Better20 Drag Selected tokens to 3x3 square around token 
+// Modify jack attribute on a token's atrributes and abilities as 54
+// Select tokens and execute macro to drag all tokens near 5ft of the token with jack 54
+
+(async () => {
+  try {
+    const wraps = d20.engine.selected();
+    if (wraps.length < 1 || wraps.length > 9) {
+      return alert("Select between 1 and 9 tokens (excluding the vortex token).");
+    }
+
+    // 1) Locate the vortex token by scanning all page tokens for jack=54
+    const page = d20.Campaign.pages.get(d20.Campaign.activePage());
+    const allModels = page.thegraphics.models.filter(m => m.attributes.layer === "objects" && m.attributes.represents);
+    const vortexModel = allModels.find(m => {
+      const cid = m.attributes.represents;
+      const ch = d20.Campaign.characters.get(cid);
+      if (!ch) return false;
+      return ch.attribs.toJSON().some(a => a.name === "jack" && Number(a.current) === 54);
+    });
+    if (!vortexModel) {
+      return alert("No token with a character attribute jack=54 found on this page.");
+    }
+    const { left: cx, top: cy } = vortexModel.attributes;
+
+    // 2) Filter selected wrappers to exclude the vortex token
+    const otherWraps = wraps.filter(w => w._model.id !== vortexModel.id);
+    if (!otherWraps.length) {
+      return alert("Select one or more tokens excluding the vortex.");
+    }
+
+    // 3) Grid & delay helper
+    const gridSize = d20.engine.snapTo;
+    const delay = ms => d20plus.ut.promiseDelay(ms);
+
+    // 4) Compute 3×3 slots around vortex (excluding center)
+    const offsets = [
+      { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+      { dx: -1, dy:  0 },               { dx: 1, dy:  0 },
+      { dx: -1, dy:  1 }, { dx: 0, dy:  1 }, { dx: 1, dy:  1 }
+    ];
+    const slots = offsets.map((off, idx) => ({
+      idx,
+      tx: cx + off.dx * gridSize,
+      ty: cy + off.dy * gridSize
+    }));
+
+    // 5) Exclude occupied positions on objects layer
+    const occupied = new Set(
+      allModels
+        .map(m => `${m.attributes.left},${m.attributes.top}`)
+    );
+    const freeSlots = slots.filter(s => !occupied.has(`${s.tx},${s.ty}`));
+    if (!freeSlots.length) {
+      return alert("No available slots around the vortex.");
+    }
+
+    // 6) Build distance pairs for greedy assignment
+    const pairs = [];
+    otherWraps.forEach((w, i) => {
+      const { left: x, top: y } = w._model.attributes;
+      freeSlots.forEach(slot => {
+        const dist = Math.hypot(slot.tx - x, slot.ty - y);
+        pairs.push({ i, slot, dist });
+      });
+    });
+    pairs.sort((a, b) => a.dist - b.dist);
+
+    // 7) Assign each wrapper to the nearest slot
+    const assignment = {};
+    const usedSlots = new Set();
+    for (const { i, slot } of pairs) {
+      if (assignment[i] == null && !usedSlots.has(slot.idx)) {
+        assignment[i] = slot;
+        usedSlots.add(slot.idx);
+      }
+      if (Object.keys(assignment).length === otherWraps.length) break;
+    }
+
+    // 8) Move each token with ghost-delta protection
+    for (const [iStr, slot] of Object.entries(assignment)) {
+      const idx = Number(iStr);
+      const model = otherWraps[idx]._model;
+
+      // Clear selection to prevent group move delta replay
+      d20.engine.unselect();
+      await delay(50);
+
+      // Save final position, clear lastmove
+      await model.save({
+        left: slot.tx,
+        top:  slot.ty,
+        rotation: model.attributes.rotation,
+        lastmove: ""
+      });
+      await delay(50);
+
+      // Record Z-index order
+      d20.Campaign.activePage().debounced_recordZIndexes();
+      await delay(50);
+    }
+
+  } catch (err) {
+    alert("Macro error: " + (err.message || err));
+    console.error(err);
+  }
+})();
