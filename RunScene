@@ -1,0 +1,18 @@
+// b20-JS: Run a single predefined scene
+// Thjmze
+// EDIT CLOCK TO YOUR SCENE NAME
+(() => {
+    const SCENE_NAME = "Clock";  // ← change this to your scene’s name
+
+    // Pull in all saved scenes
+    const scenes = Campaign.attributes.bR20tool__anim_scenes || {};
+    const entry  = Object.entries(scenes).find(([, scene]) => scene.name === SCENE_NAME);
+
+    if (!entry) {
+        return d20plus.ut.sendHackerChat(`⚠️ Could not find scene "${SCENE_NAME}"`, true);
+    }
+
+    const [sceneUid] = entry;
+    d20plus.anim.animatorTool.doStartScene(sceneUid);
+    d20plus.ut.sendHackerChat(`✅ Started animation scene: ${SCENE_NAME}`);
+})();
