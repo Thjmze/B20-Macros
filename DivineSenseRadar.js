@@ -1,6 +1,7 @@
 // Divine Sense Radar Macro
 // Outputs a radar image in chat if a NPC has the attributes of celestial, fiend, undead or elemental. 
 // You will find npc_type in attributes and abilities. All you need in that field are those words.
+// If a player is using this, you will need to use the PreDS.js macro!!!
 // Configuration below
 
 (async () => {
